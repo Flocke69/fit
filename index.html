@@ -284,43 +284,43 @@ var KCAL_PER_KG=7700;
 var C={blue:'var(--c-blue)',cyan:'var(--c-cyan)',purple:'var(--c-purple)',orange:'var(--c-orange)',green:'var(--c-green)',pink:'var(--c-pink)'};
 
 // ── Trainingspläne ────────────────────────────────────────
-// Split: Oberkörper (Mo) · Fussball (Mi) · Oberkörper (Do) · Unterkörper (Fr) · Spiel (So).
-// Unterkörper liegt bewusst am Freitag: 2 Tage nach Fussball, 2 Tage vor dem Spiel —
+// Vorlage „3 Trainingstage Variante 2" (Oberkörper / Unterkörper / Ganzkörper),
+// angepasst: Ganzkörper → zweiter Oberkörpertag; Kniebeuge statt Beinpresse;
+// Waden raus, Kreuzheben (2×6–10) rein — beides im Unterkörpertag.
+// Split: Mo Oberkörper 1 · Mi Fussball · Do Oberkörper 2 · Fr Unterkörper · So Spiel.
+// Unterkörper liegt am Freitag: 2 Tage nach Fussball, 2 Tage vor dem Spiel —
 // jede andere Position kollidiert mit Regeneration oder Spielfrische.
 // Supersets: gleiche ssGroup = Paar, direkt nacheinander, Pause erst nach dem zweiten.
 var TEMPLATES={
-  B:{ name:'Oberkörper 1 · Push-Fokus', short:'B', color:'var(--c-blue)', mins:55,
-      note:'Montag: Beine regenerieren vom Spiel. Schwerer Push, Rücken kompakt.',
+  B:{ name:'Oberkörper 1', short:'B', color:'var(--c-blue)', mins:50,
+      note:'Montag: Beine regenerieren vom Spiel. Schwerer Druck und breiter Zug.',
       ex:[
-        {id:'bench',   n:'Bankdrücken (LH)',         sets:4, rep:'5–8',  rpe:'RPE 8', inc:2.5, main:true},
-        {id:'row',     n:'Langhantelrudern',         sets:3, rep:'6–10', rpe:'RPE 8', inc:2.5, main:true},
-        {id:'ohp_db',  n:'Schulterdrücken (KH)',     sets:3, rep:'8–12', rpe:'RPE 8', inc:2},
-        {id:'latpull', n:'Latzug',                   sets:2, rep:'8–12', rpe:'RPE 8', inc:2.5},
-        {id:'lateral', n:'Seitheben',                sets:3, rep:'12–15',rpe:'RPE 9', inc:1,  ss:'Superset 1', ssGroup:'B1'},
-        {id:'facepull',n:'Face Pulls',               sets:3, rep:'12–15',rpe:'RPE 7', inc:2.5,ss:'Superset 1', ssGroup:'B1'},
-        {id:'curl',    n:'Bizeps Curls',             sets:2, rep:'8–12', rpe:'RPE 9', inc:2,  ss:'Superset 2', ssGroup:'B2'},
-        {id:'push',    n:'Trizeps Pushdown',         sets:2, rep:'8–12', rpe:'RPE 9', inc:2.5,ss:'Superset 2', ssGroup:'B2'}
+        {id:'bench',   n:'Bankdrücken (LH)',      sets:3, rep:'6–8',  rpe:'RPE 8', inc:2.5, main:true},
+        {id:'lat2',    n:'Klimmzug / Latzug breit',sets:3, rep:'6–8', rpe:'RPE 8', inc:2.5, main:true},
+        {id:'row',     n:'Langhantelrudern breit', sets:2, rep:'6–10',rpe:'RPE 8', inc:2.5, main:true},
+        {id:'lateral', n:'Seitheben (KH)',        sets:3, rep:'8–12', rpe:'RPE 9', inc:1},
+        {id:'curl',    n:'Bizeps Curls (KH)',     sets:2, rep:'6–10', rpe:'RPE 9', inc:2,  ss:'Superset', ssGroup:'B1'},
+        {id:'push',    n:'Trizeps Pushdown',      sets:2, rep:'6–10', rpe:'RPE 9', inc:2.5,ss:'Superset', ssGroup:'B1'}
       ]},
-  C:{ name:'Oberkörper 2 · Zug-Fokus', short:'C', color:'var(--c-orange)', mins:50,
-      note:'Donnerstag: null Beine — die bleiben frisch fürs Spiel am Sonntag.',
+  C:{ name:'Oberkörper 2', short:'C', color:'var(--c-orange)', mins:50,
+      note:'Donnerstag: null Beine — die bleiben frisch fürs Spiel. Andere Winkel als am Montag.',
       ex:[
-        {id:'inc_db2',  n:'Schrägbankdrücken (KH)',                sets:4, rep:'6–10', rpe:'RPE 8', inc:2,   main:true},
-        {id:'lat2',     n:'Klimmzug / Latzug',                     sets:4, rep:'6–10', rpe:'RPE 8', inc:2.5, main:true},
-        {id:'cablerow', n:'Kabelrudern eng',                       sets:3, rep:'8–12', rpe:'RPE 8', inc:2.5},
-        {id:'bay_curl', n:'Bizeps-Curls hinter dem Körper (Kabel)',sets:3, rep:'10–15',rpe:'RPE 9', inc:2.5, ss:'Superset', ssGroup:'C1'},
-        {id:'tri_over', n:'Trizepsdrücken überkopf (Kabel)',       sets:3, rep:'10–15',rpe:'RPE 9', inc:2.5, ss:'Superset', ssGroup:'C1'},
-        {id:'lateral',  n:'Seitheben',                             sets:2, rep:'12–15',rpe:'RPE 9', inc:1},
-        {id:'facepull2',n:'Face Pull',                             sets:2, rep:'12–15',rpe:'RPE 7', inc:2.5}
+        {id:'fly',      n:'Schrägbank-Fly (KH/Kabel)',      sets:3, rep:'6–10', rpe:'RPE 8', inc:2,   main:true},
+        {id:'latclose', n:'Latzug eng (Untergriff)',        sets:2, rep:'8–12', rpe:'RPE 8', inc:2.5, main:true},
+        {id:'cablerow', n:'Kabelrudern eng',                sets:3, rep:'8–12', rpe:'RPE 8', inc:2.5, main:true},
+        {id:'ohp_db',   n:'Schulterdrücken (KH)',           sets:2, rep:'6–10', rpe:'RPE 8', inc:2},
+        {id:'hammer',   n:'Hammer Curls (KH)',              sets:2, rep:'6–10', rpe:'RPE 9', inc:2,  ss:'Superset', ssGroup:'C1'},
+        {id:'tri_over', n:'Trizepsdrücken überkopf (Kabel)',sets:2, rep:'6–10', rpe:'RPE 9', inc:2.5,ss:'Superset', ssGroup:'C1'}
       ]},
   A:{ name:'Unterkörper', short:'A', color:'var(--c-purple)', mins:55,
-      note:'Freitag: Beine & hintere Kette. Beinbeuger schützt die Hamstrings beim Sprinten.',
+      note:'Freitag: schwere Grundübungen zuerst, danach Isolation. Kreuzheben bewusst nur 2 Sätze.',
       ex:[
-        {id:'squat',   n:'Kniebeuge (LH)',           sets:4, rep:'5–8',  rpe:'RPE 8', inc:2.5, main:true},
-        {id:'rdl',     n:'Rumänisches Kreuzheben',   sets:3, rep:'8–10', rpe:'RPE 8', inc:2.5, main:true},
-        {id:'legpress',n:'Beinpresse',               sets:3, rep:'10–12',rpe:'RPE 9', inc:5},
-        {id:'legcurl', n:'Beinbeuger liegend',       sets:3, rep:'10–15',rpe:'RPE 8', inc:2.5},
-        {id:'calf',    n:'Wadenheben stehend',       sets:3, rep:'10–15',rpe:'RPE 9', inc:5},
-        {id:'plank',   n:'Plank',                    sets:2, rep:'45 s', rpe:'—',     inc:0}
+        {id:'squat',    n:'Kniebeuge (LH)',        sets:2, rep:'5–8',  rpe:'RPE 8', inc:2.5, main:true},
+        {id:'deadlift', n:'Kreuzheben (LH)',       sets:2, rep:'6–10', rpe:'RPE 8', inc:5,   main:true},
+        {id:'legcurl',  n:'Beinbeuger liegend',    sets:3, rep:'6–10', rpe:'RPE 8', inc:2.5, main:true},
+        {id:'legext',   n:'Beinstrecker',          sets:2, rep:'6–10', rpe:'RPE 9', inc:2.5},
+        {id:'adductor', n:'Adduktoren-Maschine',   sets:2, rep:'8–12', rpe:'RPE 9', inc:2.5},
+        {id:'abs',      n:'Bauch (Kabel-Crunch)',  sets:3, rep:'6–10', rpe:'RPE 9', inc:2.5}
       ]}
 };
 var ACTIVITIES={
@@ -1795,7 +1795,7 @@ function computeMonth(y,m){
   var mv=days.map(function(k){return D.mood[k];}).filter(function(v){return typeof v==='number';});
   var sv=days.map(function(k){return D.sleepScore[k];}).filter(function(v){return typeof v==='number';});
   var lifts=[];
-  [['squat','Kniebeuge'],['bench','Bankdrücken'],['row','Rudern'],['rdl','RDL'],['inc_db2','Schrägbank (C)']].forEach(function(mn){
+  [['squat','Kniebeuge'],['deadlift','Kreuzheben'],['bench','Bankdrücken'],['lat2','Latzug breit'],['row','Rudern'],['cablerow','Kabelrudern']].forEach(function(mn){
     var first=null,last=null;
     days.forEach(function(k){
       var w=D.workouts[k];
@@ -2071,7 +2071,7 @@ function renderTrends(){
   var kp=el('p','tiny','Bester Satz je Hauptübung. Im Defizit ist Halten schon ein Erfolg.');
   kp.style.cssText='margin:5px 0 11px';
   kc.appendChild(kp);
-  var mains=[['squat','Kniebeuge'],['bench','Bankdrücken'],['row','Rudern'],['rdl','RDL'],['inc_db2','Schrägbank (C)']];
+  var mains=[['squat','Kniebeuge'],['deadlift','Kreuzheben'],['bench','Bankdrücken'],['lat2','Latzug breit'],['row','Rudern'],['cablerow','Kabelrudern']];
   var any=false,rows=el('div','stack');rows.style.gap='0';
   mains.forEach(function(mn){
     var all=Object.keys(D.workouts).sort();
