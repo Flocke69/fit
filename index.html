@@ -421,49 +421,91 @@ function save(){
 }
 
 // ── Automatische Backups ──────────────────────────────────
-// Eigene Schlüssel, unabhängig vom Hauptspeicher. Einmal pro Tag beim Öffnen,
-// die letzten 7 werden behalten. Fängt fehlgeschlagene Updates und Fehlbedienung ab.
-var BAK='fm.tracker.bak.', MAX_BAK=7;
+// Zwei Ebenen, beide unabhängig vom Hauptspeicher:
+//   Tagessicherung  fm.tracker.bak.<YYYY-MM-DD>  → letzte 30 Tage
+//   Monatsarchiv    fm.tracker.arch.<YYYY-MM>    → letzte 24 Monate
+// Der Hauptspeicher selbst wird NIE beschnitten — Verlauf bleibt vollständig.
+var BAK='fm.tracker.bak.', MAX_BAK=30;
+var ARCH='fm.tracker.arch.', MAX_ARCH=24;
 function hasRealData(d){
   if(!d)return false;
   return Object.keys(d.weights||{}).length>0 || Object.keys(d.workouts||{}).length>0
       || Object.keys(d.mood||{}).length>0;
 }
-function backupKeys(){
+function keysWith(prefix){
   var out=[];
   try{
     for(var i=0;i<localStorage.length;i++){
       var k=localStorage.key(i);
-      if(k&&k.indexOf(BAK)===0)out.push(k);
+      if(k&&k.indexOf(prefix)===0)out.push(k);
     }
   }catch(e){}
   return out.sort();
 }
+function backupKeys(){ return keysWith(BAK); }
+function archiveKeys(){ return keysWith(ARCH); }
+/** Schreibt und räumt bei vollem Speicher selbst auf (älteste Tagessicherung zuerst). */
+function writeSnapshot(k,payload){
+  for(var attempt=0;attempt<6;attempt++){
+    try{ localStorage.setItem(k,payload); return true; }
+    catch(e){
+      var ks=backupKeys().filter(function(x){return x!==k;});
+      if(ks.length>1){ try{localStorage.removeItem(ks[0]);}catch(e2){} continue; }
+      var as=archiveKeys().filter(function(x){return x!==k;});
+      if(as.length>1){ try{localStorage.removeItem(as[0]);}catch(e3){} continue; }
+      return false;
+    }
+  }
+  return false;
+}
 function makeBackup(){
   if(!LS_OK||!hasRealData(D))return;
+  var payload;
+  try{ payload=JSON.stringify(D); }catch(e){ return; }
+
+  // 1) Tagessicherung (30 Tage)
   var k=BAK+today();
+  if(!localStorage.getItem(k))writeSnapshot(k,payload);
+  // 2) Monatsarchiv (24 Monate) — einmal pro Kalendermonat, bleibt lange liegen
+  var mk=ARCH+today().slice(0,7);
+  if(!localStorage.getItem(mk))writeSnapshot(mk,payload);
+  // Rotation immer prüfen, nicht nur beim Neuanlegen
+  pruneSnapshots();
+}
+function pruneSnapshots(){
+  var ks=backupKeys();
+  while(ks.length>MAX_BAK){ try{localStorage.removeItem(ks.shift());}catch(e){} }
+  var as=archiveKeys();
+  while(as.length>MAX_ARCH){ try{localStorage.removeItem(as.shift());}catch(e){} }
+}
+function snapInfo(k,prefix){
+  var label=k.slice(prefix.length), n=0, w=0, size=0;
   try{
-    if(localStorage.getItem(k))return;          // heute schon gesichert
-    localStorage.setItem(k,JSON.stringify(D));
-    var ks=backupKeys();
-    while(ks.length>MAX_BAK){ try{localStorage.removeItem(ks.shift());}catch(e){} }
-  }catch(e){
-    // Speicher voll → ältestes Backup opfern, einmal neu versuchen
-    var old=backupKeys();
-    if(old.length){ try{localStorage.removeItem(old[0]);localStorage.setItem(k,JSON.stringify(D));}catch(e2){} }
-  }
+    var raw=localStorage.getItem(k)||'';
+    size=raw.length;
+    var d=JSON.parse(raw);
+    n=Object.keys(d.weights||{}).length;
+    w=Object.keys(d.workouts||{}).length;
+  }catch(e){}
+  return{key:k,label:label,weights:n,workouts:w,size:size};
 }
 function listBackups(){
-  return backupKeys().map(function(k){
-    var date=k.slice(BAK.length), n=0, w=0;
-    try{
-      var d=JSON.parse(localStorage.getItem(k));
-      n=Object.keys(d.weights||{}).length;
-      w=Object.keys(d.workouts||{}).length;
-    }catch(e){}
-    return{key:k,date:date,weights:n,workouts:w};
-  }).reverse();
+  return backupKeys().map(function(k){var s=snapInfo(k,BAK);s.date=s.label;return s;}).reverse();
 }
+function listArchives(){
+  return archiveKeys().map(function(k){return snapInfo(k,ARCH);}).reverse();
+}
+function storageUsed(){
+  var total=0;
+  try{
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k&&k.indexOf('fm.tracker')===0)total+=(localStorage.getItem(k)||'').length+k.length;
+    }
+  }catch(e){}
+  return total;
+}
+function fmtKB(n){ return n>=1048576?(n/1048576).toFixed(1)+' MB':Math.round(n/1024)+' KB'; }
 function restoreBackup(k){
   try{
     var raw=localStorage.getItem(k);
@@ -2209,36 +2251,77 @@ function renderTrends(){
 
   // Automatische Sicherungen
   var bc=el('div','card tight');
-  bc.appendChild(ey(C.green,'Automatische Sicherungen'));
-  var baks=listBackups();
-  if(!baks.length){
-    var bn=el('p','tiny','Wird beim ersten Öffnen pro Tag automatisch angelegt, sobald Daten da sind. Die letzten 7 werden behalten.');
-    bn.style.marginTop='8px';
-    bc.appendChild(bn);
-  }else{
-    var bl=el('div','stack');
-    bl.style.cssText='gap:0;margin-top:8px';
-    baks.forEach(function(b,i){
-      var r=el('div');
-      r.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)';
-      var lbl=el('div');
-      lbl.innerHTML='<div style="font-size:13px">'+fmtDate(pk(b.date))+(i===0?' <span class="tiny" style="color:var(--ok)">· neueste</span>':'')+'</div>'+
-                    '<div class="tiny">'+b.weights+' Wiegungen · '+b.workouts+' Trainings</div>';
-      r.appendChild(lbl);
-      var rb2=el('button','btn ghost sm','Laden');
-      rb2.addEventListener('click',function(){
-        if(!confirm('Sicherung vom '+fmtDate(pk(b.date))+' laden? Deine aktuellen Daten werden dabei ersetzt.'))return;
-        if(restoreBackup(b.key)){render();toast('Wiederhergestellt ✓');}
-        else toast('Fehlgeschlagen');
+  var bhead=el('div','between');
+  bhead.appendChild(ey(C.green,'Automatische Sicherungen'));
+  bhead.appendChild(el('span','tiny',fmtKB(storageUsed())+' belegt'));
+  bc.appendChild(bhead);
+
+  var keep=el('p','tiny','Dein Verlauf im Hauptspeicher bleibt vollständig — hier liegen nur zusätzliche Kopien für den Notfall.');
+  keep.style.cssText='margin-top:7px;line-height:1.5';
+  bc.appendChild(keep);
+
+  function snapList(items,titleFn,emptyTxt,note){
+    var wrap=el('div');
+    wrap.style.marginTop='12px';
+    var h=el('div','tiny');
+    h.style.cssText='font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.4px';
+    h.textContent=note.head;
+    wrap.appendChild(h);
+    if(!items.length){
+      var e0=el('p','tiny',emptyTxt);
+      e0.style.marginTop='6px';
+      wrap.appendChild(e0);
+      return wrap;
+    }
+    var list=el('div','stack');
+    list.style.cssText='gap:0;margin-top:5px';
+    var SHOW=5, expanded=false;
+    function draw(){
+      list.textContent='';
+      var shown=expanded?items:items.slice(0,SHOW);
+      shown.forEach(function(b,i){
+        var r=el('div');
+        r.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)';
+        var lbl=el('div');
+        lbl.innerHTML='<div style="font-size:13px">'+esc(titleFn(b))+(i===0?' <span class="tiny" style="color:var(--ok)">· neueste</span>':'')+'</div>'+
+                      '<div class="tiny">'+b.weights+' Wiegungen · '+b.workouts+' Trainings</div>';
+        r.appendChild(lbl);
+        var lb=el('button','btn ghost sm','Laden');
+        lb.addEventListener('click',function(){
+          if(!confirm('Sicherung „'+titleFn(b)+'" laden? Deine aktuellen Daten werden dabei ersetzt.'))return;
+          if(restoreBackup(b.key)){render();toast('Wiederhergestellt ✓');}
+          else toast('Fehlgeschlagen');
+        });
+        r.appendChild(lb);
+        list.appendChild(r);
       });
-      r.appendChild(rb2);
-      bl.appendChild(r);
-    });
-    bc.appendChild(bl);
-    var bn2=el('p','tiny','Automatisch beim ersten Öffnen pro Tag. Die letzten 7 bleiben erhalten.');
-    bn2.style.marginTop='9px';
-    bc.appendChild(bn2);
+      if(items.length>SHOW){
+        var more=el('button','btn ghost sm',expanded?'Weniger anzeigen':'Alle '+items.length+' anzeigen');
+        more.style.marginTop='8px';
+        more.addEventListener('click',function(){expanded=!expanded;draw();});
+        list.appendChild(more);
+      }
+    }
+    draw();
+    wrap.appendChild(list);
+    var n=el('p','tiny',note.foot);
+    n.style.marginTop='7px';
+    wrap.appendChild(n);
+    return wrap;
   }
+
+  bc.appendChild(snapList(
+    listBackups(),
+    function(b){return fmtDate(pk(b.date));},
+    'Entsteht beim ersten Öffnen pro Tag, sobald Daten da sind.',
+    {head:'Letzte 30 Tage', foot:'Täglich beim Öffnen. Die letzten '+MAX_BAK+' Tage bleiben erhalten.'}
+  ));
+  bc.appendChild(snapList(
+    listArchives(),
+    function(b){var p=b.label.split('-');return MONTHS[+p[1]-1]+' '+p[0];},
+    'Entsteht automatisch beim ersten Öffnen in einem neuen Monat.',
+    {head:'Monatsarchiv', foot:'Ein Stand pro Monat, '+MAX_ARCH+' Monate lang aufbewahrt.'}
+  ));
   s.appendChild(bc);
 }
 function avgOf(vals){
