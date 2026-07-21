@@ -400,6 +400,15 @@ function parseState(raw){
 }
 function save(){
   if(!D)return;
+  // SCHUTZ: Nie gefüllte Daten mit leeren überschreiben.
+  // Greift, wenn die App leer gestartet ist (Ladefehler, zweiter Tab) und
+  // beim Schliessen sonst den guten Stand im Speicher plattmachen würde.
+  if(!hasRealData(D)){
+    try{
+      var cur=localStorage.getItem(KEY);
+      if(cur&&hasRealData(JSON.parse(cur)))return;
+    }catch(e){}
+  }
   var s;
   try{s=JSON.stringify(D);}catch(e){return;}
   var ok=false;
@@ -409,6 +418,60 @@ function save(){
     save._warned=true;
     toast('⚠️ Dieser Browser speichert nicht — nutze Trends → Exportieren!');
   }
+}
+
+// ── Automatische Backups ──────────────────────────────────
+// Eigene Schlüssel, unabhängig vom Hauptspeicher. Einmal pro Tag beim Öffnen,
+// die letzten 7 werden behalten. Fängt fehlgeschlagene Updates und Fehlbedienung ab.
+var BAK='fm.tracker.bak.', MAX_BAK=7;
+function hasRealData(d){
+  if(!d)return false;
+  return Object.keys(d.weights||{}).length>0 || Object.keys(d.workouts||{}).length>0
+      || Object.keys(d.mood||{}).length>0;
+}
+function backupKeys(){
+  var out=[];
+  try{
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k&&k.indexOf(BAK)===0)out.push(k);
+    }
+  }catch(e){}
+  return out.sort();
+}
+function makeBackup(){
+  if(!LS_OK||!hasRealData(D))return;
+  var k=BAK+today();
+  try{
+    if(localStorage.getItem(k))return;          // heute schon gesichert
+    localStorage.setItem(k,JSON.stringify(D));
+    var ks=backupKeys();
+    while(ks.length>MAX_BAK){ try{localStorage.removeItem(ks.shift());}catch(e){} }
+  }catch(e){
+    // Speicher voll → ältestes Backup opfern, einmal neu versuchen
+    var old=backupKeys();
+    if(old.length){ try{localStorage.removeItem(old[0]);localStorage.setItem(k,JSON.stringify(D));}catch(e2){} }
+  }
+}
+function listBackups(){
+  return backupKeys().map(function(k){
+    var date=k.slice(BAK.length), n=0, w=0;
+    try{
+      var d=JSON.parse(localStorage.getItem(k));
+      n=Object.keys(d.weights||{}).length;
+      w=Object.keys(d.workouts||{}).length;
+    }catch(e){}
+    return{key:k,date:date,weights:n,workouts:w};
+  }).reverse();
+}
+function restoreBackup(k){
+  try{
+    var raw=localStorage.getItem(k);
+    if(!raw)return false;
+    D=parseState(raw);
+    save();
+    return true;
+  }catch(e){ return false; }
 }
 
 var UI={tab:'heute', trendRange:30, ckOpen:false, rev:null};
@@ -961,6 +1024,28 @@ function renderHeute(){
   });
   sc.appendChild(ls);
   s.appendChild(sc);
+
+  // Rettungsnetz: keine Daten, aber ein Backup vorhanden → sofort anbieten
+  if(!hasRealData(D)){
+    var baks=listBackups().filter(function(b){return b.weights||b.workouts;});
+    if(baks.length){
+      var rb=el('div','card');
+      rb.style.borderColor='var(--warn)';
+      tint(rb,'oklch(0.8 0.15 75 / .14)');
+      rb.appendChild(ey('var(--warn)','⚠️ Daten fehlen'));
+      var rp=el('p','sub','Deine Einträge sind nicht da, aber es gibt eine automatische Sicherung vom '+fmtDate(pk(baks[0].date))+' ('+baks[0].weights+' Wiegungen, '+baks[0].workouts+' Trainings). Jetzt zurückholen?');
+      rp.style.cssText='margin-top:8px;line-height:1.55';
+      rb.appendChild(rp);
+      var rbb=el('button','btn sm','Sicherung wiederherstellen');
+      rbb.style.marginTop='11px';
+      rbb.addEventListener('click',function(){
+        if(restoreBackup(baks[0].key)){render();toast('Daten wiederhergestellt ✓');}
+        else toast('Wiederherstellen fehlgeschlagen');
+      });
+      rb.appendChild(rbb);
+      s.appendChild(rb);
+    }
+  }
 
   // Speicher-Warnung, wenn dieser Browser nichts dauerhaft halten kann
   if(STORE_LAYER==='none'){
@@ -2117,10 +2202,44 @@ function renderTrends(){
   imb.addEventListener('click',importData);
   rw.appendChild(exb);rw.appendChild(imb);
   dc.appendChild(rw);
-  var dnote=el('p','tiny','Speicher-Ebene: '+STORE_LAYER+'. Alles liegt nur in diesem Browser — exportiere regelmässig, und immer bevor Claude ein App-Update veröffentlicht.');
+  var dnote=el('p','tiny','Speicher-Ebene: '+STORE_LAYER+'. Deine Daten liegen im Browser dieses Geräts und überstehen App-Updates — die Sicherungen unten sind das Netz für den Notfall.');
   dnote.style.marginTop='9px';
   dc.appendChild(dnote);
   s.appendChild(dc);
+
+  // Automatische Sicherungen
+  var bc=el('div','card tight');
+  bc.appendChild(ey(C.green,'Automatische Sicherungen'));
+  var baks=listBackups();
+  if(!baks.length){
+    var bn=el('p','tiny','Wird beim ersten Öffnen pro Tag automatisch angelegt, sobald Daten da sind. Die letzten 7 werden behalten.');
+    bn.style.marginTop='8px';
+    bc.appendChild(bn);
+  }else{
+    var bl=el('div','stack');
+    bl.style.cssText='gap:0;margin-top:8px';
+    baks.forEach(function(b,i){
+      var r=el('div');
+      r.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)';
+      var lbl=el('div');
+      lbl.innerHTML='<div style="font-size:13px">'+fmtDate(pk(b.date))+(i===0?' <span class="tiny" style="color:var(--ok)">· neueste</span>':'')+'</div>'+
+                    '<div class="tiny">'+b.weights+' Wiegungen · '+b.workouts+' Trainings</div>';
+      r.appendChild(lbl);
+      var rb2=el('button','btn ghost sm','Laden');
+      rb2.addEventListener('click',function(){
+        if(!confirm('Sicherung vom '+fmtDate(pk(b.date))+' laden? Deine aktuellen Daten werden dabei ersetzt.'))return;
+        if(restoreBackup(b.key)){render();toast('Wiederhergestellt ✓');}
+        else toast('Fehlgeschlagen');
+      });
+      r.appendChild(rb2);
+      bl.appendChild(r);
+    });
+    bc.appendChild(bl);
+    var bn2=el('p','tiny','Automatisch beim ersten Öffnen pro Tag. Die letzten 7 bleiben erhalten.');
+    bn2.style.marginTop='9px';
+    bc.appendChild(bn2);
+  }
+  s.appendChild(bc);
 }
 function avgOf(vals){
   var v=vals.filter(function(x){return x>0;});
@@ -2417,25 +2536,34 @@ buildTabs();
 LS_OK=lsAvailable();
 var _lsRaw=null;
 if(LS_OK){ try{_lsRaw=localStorage.getItem(KEY);}catch(e){_lsRaw=null;} }
+function finishBoot(){
+  makeBackup();     // Tagessicherung anlegen, bevor irgendetwas geändert wird
+  render();
+}
 idbOpen(function(db){
   IDB=db;
   if(_lsRaw!=null){
     STORE_LAYER='localStorage';
     D=parseState(_lsRaw);
     if(IDB)idbSet(IDB,_lsRaw);            // spiegeln
-    render();
+    finishBoot();
   }else if(db){
     idbGet(db,function(v){
       D=parseState(v);
       STORE_LAYER=v!=null?'IndexedDB':(LS_OK?'localStorage':'none');
       if(v!=null&&LS_OK){ try{localStorage.setItem(KEY,v);}catch(e){} }
-      render();
+      finishBoot();
     });
   }else{
     D=parseState(null);
     STORE_LAYER=LS_OK?'localStorage':'none';
-    render();
+    finishBoot();
   }
+});
+// Zweiter Tab hat gespeichert → Stand übernehmen statt ihn später zu überschreiben
+window.addEventListener('storage',function(e){
+  if(e.key!==KEY||!e.newValue||_workoutGuard)return;
+  try{ D=parseState(e.newValue); render(); }catch(err){}
 });
 // iOS killt Webviews gern ohne Vorwarnung — bei jedem Verstecken sichern
 document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden')save(); });
